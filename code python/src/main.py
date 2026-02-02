@@ -317,7 +317,8 @@ def draw_overlay(
     config: dict, 
     fps: float, 
     white_ratio: float,
-    has_reference_bg: bool = False
+    has_reference_bg: bool = False,
+    stationary_status: str = ""
 ) -> np.ndarray:
     """
     Draw overlay text showing current settings.
@@ -328,6 +329,7 @@ def draw_overlay(
         fps: Current frames per second.
         white_ratio: Current white pixel ratio (0-1).
         has_reference_bg: Whether a reference background has been captured.
+        stationary_status: Current stationary detection status string.
         
     Returns:
         Frame with overlay.
@@ -337,6 +339,7 @@ def draw_overlay(
     
     # Build settings to display based on mode
     use_static = config.get("use_static_background", False)
+    stationary_delay = config.get("stationary_delay_ms", 500)
     
     if use_static:
         diff_mode = config.get("diff_mode", "both")
@@ -348,6 +351,7 @@ def draw_overlay(
             f"Morph: erode={morph_erode} dilate={morph_dilate} (e/E, l/L)",
             f"FPS: {fps:.1f}  White: {white_ratio * 100:.1f}%",
             f"Static BG: ON (b)  Ref: {'SET' if has_reference_bg else 'NOT SET'} (r)",
+            f"Stationary delay: {stationary_delay}ms  {stationary_status}",
             f"Fullscreen: {'ON' if config['fullscreen'] else 'OFF'} (f)",
             "s=save, SPACE=send, q=quit"
         ]
@@ -356,6 +360,7 @@ def draw_overlay(
             f"Threshold: {config['threshold']} (+/- to adjust)",
             f"FPS: {fps:.1f}",
             f"White: {white_ratio * 100:.1f}%",
+            f"Stationary delay: {stationary_delay}ms  {stationary_status}",
             f"Static BG: {'ON' if use_static else 'OFF'} (b)",
             f"Fullscreen: {'ON' if config['fullscreen'] else 'OFF'} (f)",
             "s=save, r=capture bg, SPACE=send, q=quit"
@@ -421,6 +426,11 @@ def main():
     # Static background state
     reference_bg: Optional[np.ndarray] = None
     
+    # Stationary detection state
+    waiting_for_stationary = False
+    stationary_start_time: Optional[float] = None
+    pending_binary_frame: Optional[np.ndarray] = None
+    
     print("\n=== Water Drawing Calibration App ===")
     print("Controls:")
     print("  +/- or LEFT/RIGHT: Adjust threshold")
@@ -480,21 +490,64 @@ def main():
         total_pixels = config["output_width"] * config["output_height"] * 255
         white_ratio = np.sum(binary) / total_pixels
         
+        # Build stationary status string for overlay
+        if waiting_for_stationary:
+            if stationary_start_time is not None:
+                elapsed_ms = (time.time() - stationary_start_time) * 1000
+                stationary_status = f"[WAITING: {elapsed_ms:.0f}ms]"
+            else:
+                stationary_status = "[MOVING...]"
+        else:
+            stationary_status = ""
+        
         # Draw overlay
         display_frame = draw_overlay(
             display_frame, config, fps, white_ratio,
-            has_reference_bg=(reference_bg is not None)
+            has_reference_bg=(reference_bg is not None),
+            stationary_status=stationary_status
         )
         
         # Show frame
         cv2.imshow(window_name, display_frame)
         
-        # -------- CHANGE DETECTION (non-blocking) --------
+        # -------- CHANGE DETECTION WITH STATIONARY WAIT (non-blocking) --------
         change = abs(white_ratio - prev_white_ratio)
         object_appeared = change > config["change_detection_threshold"]
+        stationary_threshold = config.get("stationary_threshold", 0.02)
+        stationary_delay_ms = config.get("stationary_delay_ms", 500)
+        is_stationary = change < stationary_threshold
         
-        if object_appeared and arduino.is_ready():
-            arduino.send_frame(binary)
+        if object_appeared and not waiting_for_stationary:
+            # Object just appeared - start waiting for user to become stationary
+            waiting_for_stationary = True
+            stationary_start_time = None
+            pending_binary_frame = binary.copy()
+            print(f"Object detected (change={change:.3f}), waiting for stationary...")
+        
+        if waiting_for_stationary:
+            # Update the pending frame to capture the latest position
+            pending_binary_frame = binary.copy()
+            
+            if is_stationary:
+                # User is stationary
+                if stationary_start_time is None:
+                    # Just became stationary - start the timer
+                    stationary_start_time = time.time()
+                else:
+                    # Check if we've been stationary long enough
+                    elapsed_ms = (time.time() - stationary_start_time) * 1000
+                    if elapsed_ms >= stationary_delay_ms and arduino.is_ready():
+                        # Been stationary long enough - send to Arduino
+                        print(f"Stationary for {elapsed_ms:.0f}ms - sending to Arduino")
+                        arduino.send_frame(pending_binary_frame)
+                        waiting_for_stationary = False
+                        stationary_start_time = None
+                        pending_binary_frame = None
+            else:
+                # User is moving - reset stationary timer
+                if stationary_start_time is not None:
+                    print(f"Movement detected (change={change:.3f}), resetting stationary timer...")
+                stationary_start_time = None
         
         prev_white_ratio = white_ratio
         
