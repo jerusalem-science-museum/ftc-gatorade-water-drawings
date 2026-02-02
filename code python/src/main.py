@@ -8,12 +8,39 @@ Key design: Display loop is decoupled from Arduino communication.
 Display NEVER waits for Arduino - user always sees real-time video.
 """
 
+import subprocess
 import sys
 import time
 from typing import Optional
 
 import cv2
 import numpy as np
+
+
+def disable_screen_blanking():
+    """Disable screen blanking/DPMS on Linux to prevent display from fading to black."""
+    if not sys.platform.startswith('linux'):
+        return
+    
+    print("Disabling screen blanking...")
+    commands = [
+        # Disable DPMS (Display Power Management Signaling)
+        "xset -dpms",
+        # Disable screen saver
+        "xset s off",
+        # Disable screen blanking
+        "xset s noblank",
+    ]
+    
+    for cmd in commands:
+        try:
+            result = subprocess.run(cmd, shell=True, capture_output=True, timeout=2)
+            if result.returncode == 0:
+                print(f"  OK: {cmd}")
+            else:
+                print(f"  SKIP: {cmd} (may need X display)")
+        except Exception as e:
+            print(f"  SKIP: {cmd} ({e})")
 
 # Import application modules
 from config import get_config_path, load_config, save_config
@@ -25,6 +52,9 @@ from arduino import ArduinoSender
 
 def main():
     """Main entry point for the water drawing app."""
+    
+    # Disable screen blanking on Linux (prevents fade to black)
+    disable_screen_blanking()
     
     # Load configuration
     config_path = get_config_path()
@@ -97,6 +127,10 @@ def main():
     else:
         print("Warning: Could not capture initial reference background")
     
+    # Track frame brightness to detect camera going dark
+    last_brightness_warning = 0
+    consecutive_dark_frames = 0
+    
     running = True
     while running:
         # -------- CAPTURE --------
@@ -104,6 +138,18 @@ def main():
         if not ret:
             print("Error: Could not read frame")
             break
+        
+        # Check if frame is very dark (camera might be auto-exposing incorrectly)
+        frame_brightness = np.mean(frame)
+        if frame_brightness < 10:  # Very dark frame
+            consecutive_dark_frames += 1
+            if consecutive_dark_frames > 30 and time.time() - last_brightness_warning > 5:
+                print(f"WARNING: Camera producing dark frames (brightness={frame_brightness:.1f})")
+                print("  - Check camera exposure settings")
+                print("  - Camera may need re-initialization")
+                last_brightness_warning = time.time()
+        else:
+            consecutive_dark_frames = 0
         
         # -------- PROCESS --------
         small, binary, gray = process_frame(frame, config, reference_bg)
