@@ -81,6 +81,7 @@ def set_camera_controls_linux(device_index: int, config: dict) -> None:
         config: Configuration dictionary with camera settings.
     """
     import subprocess
+    import time
     
     device = f"/dev/video{device_index}"
     
@@ -89,24 +90,57 @@ def set_camera_controls_linux(device_index: int, config: dict) -> None:
     wb_temp = config.get("camera_wb_temperature", 4600)
     gain = config.get("camera_gain", 0)
     
-    commands = [
-        # Disable auto-exposure and set manual value
+    # First, disable all auto modes (must happen before setting manual values)
+    auto_disable_commands = [
+        # Disable auto-exposure (1 = manual mode for most cameras)
         f"v4l2-ctl -d {device} --set-ctrl=exposure_auto=1",
-        f"v4l2-ctl -d {device} --set-ctrl=exposure_absolute={exposure}",
-        # Disable auto white balance and set manual value
+        # Disable auto white balance
         f"v4l2-ctl -d {device} --set-ctrl=white_balance_temperature_auto=0",
-        f"v4l2-ctl -d {device} --set-ctrl=white_balance_temperature={wb_temp}",
-        # Set gain
-        f"v4l2-ctl -d {device} --set-ctrl=gain={gain}",
+        # Some cameras use different control names
+        f"v4l2-ctl -d {device} --set-ctrl=white_balance_automatic=0",
+        f"v4l2-ctl -d {device} --set-ctrl=auto_white_balance=0",
     ]
     
-    for cmd in commands:
+    for cmd in auto_disable_commands:
         try:
-            subprocess.run(cmd, shell=True, capture_output=True, timeout=2)
-        except Exception as e:
-            print(f"Warning: v4l2-ctl command failed: {cmd} ({e})")
+            result = subprocess.run(cmd, shell=True, capture_output=True, timeout=2, text=True)
+            if result.returncode == 0:
+                print(f"  OK: {cmd.split('--set-ctrl=')[1]}")
+        except Exception:
+            pass  # Silently ignore - camera may not support this control
     
-    print(f"Linux camera controls set via v4l2-ctl: exposure={exposure}, wb={wb_temp}, gain={gain}")
+    # Small delay to let camera apply auto-disable settings
+    time.sleep(0.1)
+    
+    # Now set the manual values
+    manual_commands = [
+        (f"v4l2-ctl -d {device} --set-ctrl=exposure_absolute={exposure}", "exposure_absolute"),
+        (f"v4l2-ctl -d {device} --set-ctrl=white_balance_temperature={wb_temp}", "white_balance_temperature"),
+        (f"v4l2-ctl -d {device} --set-ctrl=gain={gain}", "gain"),
+    ]
+    
+    for cmd, name in manual_commands:
+        try:
+            result = subprocess.run(cmd, shell=True, capture_output=True, timeout=2, text=True)
+            if result.returncode == 0:
+                print(f"  OK: {name}")
+            else:
+                print(f"  FAIL: {name} - {result.stderr.strip()}")
+        except Exception as e:
+            print(f"  ERROR: {name} - {e}")
+    
+    # Verify settings were applied
+    print(f"\nVerifying camera settings on {device}:")
+    verify_cmd = f"v4l2-ctl -d {device} --get-ctrl=exposure_auto,exposure_absolute,white_balance_temperature_auto,white_balance_temperature,gain"
+    try:
+        result = subprocess.run(verify_cmd, shell=True, capture_output=True, timeout=2, text=True)
+        if result.stdout:
+            for line in result.stdout.strip().split('\n'):
+                print(f"  {line}")
+    except Exception as e:
+        print(f"  Could not verify: {e}")
+    
+    print(f"\nTarget values: exposure={exposure}, wb={wb_temp}, gain={gain}")
 
 
 def init_capture(config: dict) -> Optional[cv2.VideoCapture]:
@@ -133,38 +167,38 @@ def init_capture(config: dict) -> Optional[cv2.VideoCapture]:
     else:
         # It's a camera index
         camera_index = int(video_source)
-        cap = cv2.VideoCapture(camera_index)
+        
+        # On Linux, use V4L2 backend explicitly to avoid GStreamer warnings
+        if sys.platform.startswith('linux'):
+            print(f"Opening camera {camera_index} with V4L2 backend...")
+            cap = cv2.VideoCapture(camera_index, cv2.CAP_V4L2)
+        else:
+            cap = cv2.VideoCapture(camera_index)
+        
+        if not cap.isOpened():
+            print(f"Error: Could not open camera {camera_index}")
+            return None
         
         # Set capture resolution to reduce USB bandwidth and latency
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, config["capture_width"])
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, config["capture_height"])
         
-        # Disable auto-adjustment to keep consistent brightness for background subtraction
-        # Try multiple approaches since cameras vary wildly in what they accept
-        
-        # Attempt to disable auto-exposure (different cameras use different values)
-        cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 0.25)  # Manual mode on many cameras
-        cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1)     # Manual mode on other cameras
-        
-        # Set fixed exposure value (negative = shorter exposure, less light)
-        cap.set(cv2.CAP_PROP_EXPOSURE, -6)  # Adjust this value if too dark/bright
-        
-        # Disable auto white balance and set fixed value
-        cap.set(cv2.CAP_PROP_AUTO_WB, 0)
-        cap.set(cv2.CAP_PROP_WB_TEMPERATURE, 4600)  # Neutral daylight
-        
-        # Disable auto gain
-        cap.set(cv2.CAP_PROP_GAIN, 0)
-        
-        # Print what the camera actually accepted (OpenCV method)
-        print(f"Camera settings (OpenCV) - Auto-exposure: {cap.get(cv2.CAP_PROP_AUTO_EXPOSURE)}, "
-              f"Exposure: {cap.get(cv2.CAP_PROP_EXPOSURE)}, "
-              f"Auto-WB: {cap.get(cv2.CAP_PROP_AUTO_WB)}, "
-              f"Gain: {cap.get(cv2.CAP_PROP_GAIN)}")
-        
-        # On Linux, also use v4l2-ctl which works more reliably
+        # On Linux, use v4l2-ctl which works much more reliably than OpenCV properties
         if sys.platform.startswith('linux'):
             set_camera_controls_linux(camera_index, config)
+        else:
+            # On Windows/Mac, try OpenCV properties (less reliable but worth trying)
+            cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 0.25)  # Manual mode on many cameras
+            cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1)     # Manual mode on other cameras
+            cap.set(cv2.CAP_PROP_EXPOSURE, -6)
+            cap.set(cv2.CAP_PROP_AUTO_WB, 0)
+            cap.set(cv2.CAP_PROP_WB_TEMPERATURE, 4600)
+            cap.set(cv2.CAP_PROP_GAIN, 0)
+            
+            print(f"Camera settings (OpenCV) - Auto-exposure: {cap.get(cv2.CAP_PROP_AUTO_EXPOSURE)}, "
+                  f"Exposure: {cap.get(cv2.CAP_PROP_EXPOSURE)}, "
+                  f"Auto-WB: {cap.get(cv2.CAP_PROP_AUTO_WB)}, "
+                  f"Gain: {cap.get(cv2.CAP_PROP_GAIN)}")
     
     if not cap.isOpened():
         print(f"Error: Could not open video source: {video_source}")
