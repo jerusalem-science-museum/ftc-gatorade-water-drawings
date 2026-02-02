@@ -103,14 +103,18 @@ def main():
     camera_refresh_interval = 30  # seconds after initial period
     startup_time = time.time()
     
+    # Overlay visibility (hidden by default for cleaner display)
+    overlay_visible = False
+    
     print("\n=== Water Drawing App ===")
     print("Controls:")
     print("  +/- or LEFT/RIGHT: Adjust difference threshold")
-    print("  d: Cycle diff mode (both/lighter/darker)")
+    print("  m: Cycle diff mode (both/lighter/darker)")
     print("  e/E: Increase/decrease erode iterations")
     print("  l/L: Increase/decrease dilate iterations")
     print("  r: Capture reference background")
     print("  s: Save config")
+    print("  d: Toggle overlay display")
     print("  f: Toggle fullscreen")
     print("  SPACE: Manual send to Arduino")
     print("  q/ESC: Quit")
@@ -195,12 +199,13 @@ def main():
         else:
             stationary_status = ""
         
-        # Draw overlay
-        display_frame = draw_overlay(
-            display_frame, config, fps, white_ratio,
-            has_reference_bg=(reference_bg is not None),
-            stationary_status=stationary_status
-        )
+        # Draw overlay (if visible)
+        if overlay_visible:
+            display_frame = draw_overlay(
+                display_frame, config, fps, white_ratio,
+                has_reference_bg=(reference_bg is not None),
+                stationary_status=stationary_status
+            )
         
         # Show frame
         cv2.imshow(window_name, display_frame)
@@ -333,6 +338,10 @@ def main():
             print(f"Fullscreen: {'ON' if config['fullscreen'] else 'OFF'}")
         
         elif key == ord('d'):
+            overlay_visible = not overlay_visible
+            print(f"Overlay: {'ON' if overlay_visible else 'OFF'}")
+        
+        elif key == ord('m'):
             # Cycle diff mode: both -> lighter -> darker -> both
             modes = ["both", "lighter", "darker"]
             current = config.get("diff_mode", "both")
