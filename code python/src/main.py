@@ -44,7 +44,7 @@ def disable_screen_blanking():
 
 # Import application modules
 from config import get_config_path, load_config, save_config
-from capture import init_capture
+from capture import init_capture, set_camera_controls_linux
 from processing import process_frame, capture_reference_background
 from display import create_stacked_display, draw_overlay, set_fullscreen
 from arduino import ArduinoSender
@@ -97,6 +97,10 @@ def main():
     is_streaming = False
     last_send_time: float = 0.0
     prev_binary: Optional[np.ndarray] = None
+    
+    # Camera control refresh (Linux only - prevents auto-exposure from taking over)
+    last_camera_refresh = time.time()
+    camera_refresh_interval = 30  # seconds
     
     print("\n=== Water Drawing App ===")
     print("Controls:")
@@ -294,6 +298,14 @@ def main():
             fps = frame_count / elapsed
             frame_count = 0
             fps_update_time = current_time
+        
+        # -------- PERIODIC CAMERA REFRESH (Linux) --------
+        # Re-apply camera controls periodically to prevent auto-exposure from taking over
+        if sys.platform.startswith('linux') and time.time() - last_camera_refresh > camera_refresh_interval:
+            camera_index = int(config["video_source"])
+            print("Refreshing camera controls...")
+            set_camera_controls_linux(camera_index, config)
+            last_camera_refresh = time.time()
         
         # -------- HANDLE KEYS --------
         key = cv2.waitKey(1) & 0xFF
