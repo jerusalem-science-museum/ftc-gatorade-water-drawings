@@ -72,6 +72,43 @@ def save_config(path: str, config: dict) -> bool:
 
 # ============== CAPTURE ==============
 
+def set_camera_controls_linux(device_index: int, config: dict) -> None:
+    """
+    Set camera controls on Linux using v4l2-ctl.
+    
+    Args:
+        device_index: Camera index (0, 1, 2, etc.)
+        config: Configuration dictionary with camera settings.
+    """
+    import subprocess
+    
+    device = f"/dev/video{device_index}"
+    
+    # Get configured values or use defaults
+    exposure = config.get("camera_exposure", 157)
+    wb_temp = config.get("camera_wb_temperature", 4600)
+    gain = config.get("camera_gain", 0)
+    
+    commands = [
+        # Disable auto-exposure and set manual value
+        f"v4l2-ctl -d {device} --set-ctrl=exposure_auto=1",
+        f"v4l2-ctl -d {device} --set-ctrl=exposure_absolute={exposure}",
+        # Disable auto white balance and set manual value
+        f"v4l2-ctl -d {device} --set-ctrl=white_balance_temperature_auto=0",
+        f"v4l2-ctl -d {device} --set-ctrl=white_balance_temperature={wb_temp}",
+        # Set gain
+        f"v4l2-ctl -d {device} --set-ctrl=gain={gain}",
+    ]
+    
+    for cmd in commands:
+        try:
+            subprocess.run(cmd, shell=True, capture_output=True, timeout=2)
+        except Exception as e:
+            print(f"Warning: v4l2-ctl command failed: {cmd} ({e})")
+    
+    print(f"Linux camera controls set via v4l2-ctl: exposure={exposure}, wb={wb_temp}, gain={gain}")
+
+
 def init_capture(config: dict) -> Optional[cv2.VideoCapture]:
     """
     Initialize video capture with settings from config.
@@ -119,11 +156,15 @@ def init_capture(config: dict) -> Optional[cv2.VideoCapture]:
         # Disable auto gain
         cap.set(cv2.CAP_PROP_GAIN, 0)
         
-        # Print what the camera actually accepted
-        print(f"Camera settings - Auto-exposure: {cap.get(cv2.CAP_PROP_AUTO_EXPOSURE)}, "
+        # Print what the camera actually accepted (OpenCV method)
+        print(f"Camera settings (OpenCV) - Auto-exposure: {cap.get(cv2.CAP_PROP_AUTO_EXPOSURE)}, "
               f"Exposure: {cap.get(cv2.CAP_PROP_EXPOSURE)}, "
               f"Auto-WB: {cap.get(cv2.CAP_PROP_AUTO_WB)}, "
               f"Gain: {cap.get(cv2.CAP_PROP_GAIN)}")
+        
+        # On Linux, also use v4l2-ctl which works more reliably
+        if sys.platform.startswith('linux'):
+            set_camera_controls_linux(camera_index, config)
     
     if not cap.isOpened():
         print(f"Error: Could not open video source: {video_source}")

@@ -16,5 +16,8 @@
   "morph_dilate": 0,
   "change_detection_threshold": 0.4,
   "flip_vertical": false,
-  "flip_horizontal": false
+  "flip_horizontal": false,
+  "camera_exposure": 157,
+  "camera_wb_temperature": 4600,
+  "camera_gain": 0
 }
