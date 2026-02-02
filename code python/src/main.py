@@ -288,23 +288,32 @@ def create_stacked_display(
     """
     Create a stacked display with original on top, binary below.
     
+    The original (high-res color) image is scaled to match the width of the 
+    binary display while preserving aspect ratio. The binary image is scaled
+    with nearest-neighbor to show the actual pixel grid.
+    
     Args:
-        original: Color image (BGR).
-        binary: Binary image (grayscale).
-        scale: Upscale factor for visibility.
+        original: Color image (BGR) at capture resolution.
+        binary: Binary image (grayscale) at output resolution (e.g., 64x64).
+        scale: Upscale factor for the binary image.
         
     Returns:
         Combined display frame.
     """
-    # Upscale both images
-    h, w = original.shape[:2]
-    new_size = (w * scale, h * scale)
+    # Scale binary with nearest-neighbor to show pixel grid
+    bin_h, bin_w = binary.shape[:2]
+    binary_display_size = (bin_w * scale, bin_h * scale)
     
-    original_scaled = cv2.resize(original, new_size, interpolation=cv2.INTER_NEAREST)
-    
-    # Convert binary to BGR for stacking
     binary_bgr = cv2.cvtColor(binary, cv2.COLOR_GRAY2BGR)
-    binary_scaled = cv2.resize(binary_bgr, new_size, interpolation=cv2.INTER_NEAREST)
+    binary_scaled = cv2.resize(binary_bgr, binary_display_size, interpolation=cv2.INTER_NEAREST)
+    
+    # Scale original to match binary display width, preserving aspect ratio
+    orig_h, orig_w = original.shape[:2]
+    target_width = binary_display_size[0]
+    aspect_ratio = orig_h / orig_w
+    target_height = int(target_width * aspect_ratio)
+    
+    original_scaled = cv2.resize(original, (target_width, target_height), interpolation=cv2.INTER_LINEAR)
     
     # Stack vertically
     stacked = cv2.vconcat([original_scaled, binary_scaled])
@@ -418,7 +427,6 @@ def main():
         set_fullscreen(window_name, True)
     
     # State variables
-    prev_white_ratio = 0.0
     frame_count = 0
     fps = 0.0
     fps_update_time = cv2.getTickCount()
@@ -426,10 +434,12 @@ def main():
     # Static background state
     reference_bg: Optional[np.ndarray] = None
     
-    # Stationary detection state
-    waiting_for_stationary = False
+    # Streaming state
+    waiting_for_stationary = False  # Waiting for user to hold still before streaming starts
     stationary_start_time: Optional[float] = None
-    pending_binary_frame: Optional[np.ndarray] = None
+    is_streaming = False  # Currently streaming frames to Arduino
+    last_send_time: float = 0.0  # For rate limiting Arduino sends
+    prev_binary: Optional[np.ndarray] = None  # Previous frame for motion detection
     
     print("\n=== Water Drawing Calibration App ===")
     print("Controls:")
@@ -484,19 +494,57 @@ def main():
         small, binary, gray = process_frame(frame, config, reference_bg)
         
         # -------- DISPLAY (always updates - never blocked by Arduino) --------
-        display_frame = create_stacked_display(small, binary, config["display_scale"])
+        # Apply flips to full-res frame for high-res preview
+        display_original = frame.copy()
+        if config["flip_vertical"]:
+            display_original = cv2.flip(display_original, 0)
+        if config["flip_horizontal"]:
+            display_original = cv2.flip(display_original, 1)
         
-        # Calculate white ratio for change detection
-        total_pixels = config["output_width"] * config["output_height"] * 255
-        white_ratio = np.sum(binary) / total_pixels
+        display_frame = create_stacked_display(display_original, binary, config["display_scale"])
         
-        # Build stationary status string for overlay
-        if waiting_for_stationary:
+        # Calculate white ratio for presence detection
+        total_pixels = config["output_width"] * config["output_height"]
+        white_ratio = np.sum(binary) / (total_pixels * 255)
+        
+        # Calculate pixel movement using XOR comparison (detects position changes, not just amount)
+        stationary_threshold = config.get("stationary_threshold", 0.02)
+        if prev_binary is not None:
+            # XOR: pixels that are different between frames
+            pixel_diff = cv2.bitwise_xor(binary, prev_binary)
+            # Count changed pixels as ratio of total pixels
+            changed_pixels = np.sum(pixel_diff) / 255  # Each changed pixel is 255
+            pixel_change_ratio = changed_pixels / total_pixels
+            is_currently_still = pixel_change_ratio < stationary_threshold
+        else:
+            pixel_change_ratio = 0.0
+            is_currently_still = False  # First frame, not stationary yet
+        
+        # Build status string for overlay (shows pixel change % to help tune threshold)
+        require_stationary = config.get("require_stationary_for_send", True)
+        arduino_send_fps = config.get("arduino_send_fps", 10)
+        send_interval = 1.0 / arduino_send_fps if arduino_send_fps > 0 else 0
+        
+        if is_streaming:
+            if require_stationary:
+                # Show stationary status and FPS cooldown during streaming
+                time_since_send = time.time() - last_send_time
+                fps_ready = time_since_send >= send_interval
+                fps_status = "ready" if fps_ready else f"wait {(send_interval - time_since_send):.1f}s"
+                
+                if stationary_start_time is not None:
+                    elapsed_ms = (time.time() - stationary_start_time) * 1000
+                    stationary_status = f"[HOLD: {elapsed_ms:.0f}ms | FPS: {fps_status}] move:{pixel_change_ratio:.1%}"
+                else:
+                    stationary_status = f"[MOVING | FPS: {fps_status}] move:{pixel_change_ratio:.1%}"
+            else:
+                stationary_status = f"[STREAMING @ {arduino_send_fps} FPS] move:{pixel_change_ratio:.1%}"
+        elif waiting_for_stationary:
             if stationary_start_time is not None:
                 elapsed_ms = (time.time() - stationary_start_time) * 1000
-                stationary_status = f"[WAITING: {elapsed_ms:.0f}ms]"
+                stationary_status = f"[HOLD STILL: {elapsed_ms:.0f}ms] move:{pixel_change_ratio:.1%}"
             else:
-                stationary_status = "[MOVING...]"
+                stationary_status = f"[MOVING {pixel_change_ratio:.1%} > {stationary_threshold:.1%}]"
         else:
             stationary_status = ""
         
@@ -510,46 +558,98 @@ def main():
         # Show frame
         cv2.imshow(window_name, display_frame)
         
-        # -------- CHANGE DETECTION WITH STATIONARY WAIT (non-blocking) --------
-        change = abs(white_ratio - prev_white_ratio)
-        object_appeared = change > config["change_detection_threshold"]
-        stationary_threshold = config.get("stationary_threshold", 0.02)
+        # -------- PRESENCE DETECTION & STREAMING (non-blocking) --------
+        # Get config values (change and stationary_threshold already calculated above for display)
         stationary_delay_ms = config.get("stationary_delay_ms", 500)
-        is_stationary = change < stationary_threshold
+        min_presence = config.get("min_presence_threshold", 0.05)
+        arduino_send_fps = config.get("arduino_send_fps", 10)
+        send_interval = 1.0 / arduino_send_fps if arduino_send_fps > 0 else 0
         
-        if object_appeared and not waiting_for_stationary:
-            # Object just appeared - start waiting for user to become stationary
-            waiting_for_stationary = True
-            stationary_start_time = None
-            pending_binary_frame = binary.copy()
-            print(f"Object detected (change={change:.3f}), waiting for stationary...")
+        # Determine current state
+        has_presence = white_ratio > min_presence  # Is there enough white pixels?
+        is_stationary = is_currently_still  # Are pixels stable frame-to-frame? (calculated above)
+        current_time_sec = time.time()
         
-        if waiting_for_stationary:
-            # Update the pending frame to capture the latest position
-            pending_binary_frame = binary.copy()
-            
-            if is_stationary:
-                # User is stationary
+        require_stationary = config.get("require_stationary_for_send", True)
+        
+        if is_streaming:
+            # Currently streaming
+            if not has_presence:
+                # Presence ended - stop streaming
+                is_streaming = False
+                stationary_start_time = None
+                print("Presence ended, stopping stream")
+            elif require_stationary:
+                # Require stationary for each send + respect FPS limit
+                time_since_last_send = current_time_sec - last_send_time
+                fps_ready = time_since_last_send >= send_interval
+                
+                if not is_stationary:
+                    # User is moving - reset stationary timer
+                    if stationary_start_time is not None:
+                        print(f"Movement during stream (pixel change={pixel_change_ratio:.1%}), waiting for stationary...")
+                    stationary_start_time = None
+                else:
+                    # User is stationary - track time
+                    if stationary_start_time is None:
+                        stationary_start_time = current_time_sec
+                    
+                    # Check if both conditions are met: stationary long enough AND FPS interval passed
+                    elapsed_stationary_ms = (current_time_sec - stationary_start_time) * 1000
+                    stationary_ready = elapsed_stationary_ms >= stationary_delay_ms
+                    
+                    if stationary_ready and fps_ready and arduino.is_ready():
+                        # Both conditions met - send frame
+                        arduino.send_frame(binary)
+                        last_send_time = current_time_sec
+                        stationary_start_time = None  # Reset for next send
+                        print(f"Sent frame (stationary for {elapsed_stationary_ms:.0f}ms)")
+            else:
+                # Just send at configured FPS rate (no stationary requirement)
+                if arduino.is_ready() and (current_time_sec - last_send_time) >= send_interval:
+                    arduino.send_frame(binary)
+                    last_send_time = current_time_sec
+        
+        elif waiting_for_stationary:
+            # Waiting for user to hold still before starting stream
+            if not has_presence:
+                # User left before becoming stationary
+                waiting_for_stationary = False
+                stationary_start_time = None
+                print("Presence ended before stationary")
+            elif not is_stationary:
+                # User is still moving - reset the stationary timer
+                if stationary_start_time is not None:
+                    print(f"Movement detected (pixel change={pixel_change_ratio:.1%}), resetting timer...")
+                stationary_start_time = None
+            else:
+                # User is holding still (pixel change < threshold)
                 if stationary_start_time is None:
                     # Just became stationary - start the timer
-                    stationary_start_time = time.time()
+                    stationary_start_time = current_time_sec
+                    print(f"User stationary (pixel change={pixel_change_ratio:.1%}), starting {stationary_delay_ms}ms timer...")
                 else:
-                    # Check if we've been stationary long enough
-                    elapsed_ms = (time.time() - stationary_start_time) * 1000
-                    if elapsed_ms >= stationary_delay_ms and arduino.is_ready():
-                        # Been stationary long enough - send to Arduino
-                        print(f"Stationary for {elapsed_ms:.0f}ms - sending to Arduino")
-                        arduino.send_frame(pending_binary_frame)
+                    # Check if stationary long enough
+                    elapsed_ms = (current_time_sec - stationary_start_time) * 1000
+                    if elapsed_ms >= stationary_delay_ms:
+                        # Stationary long enough - start streaming!
+                        print(f"Stationary for {elapsed_ms:.0f}ms - starting stream at {arduino_send_fps} FPS")
+                        is_streaming = True
                         waiting_for_stationary = False
                         stationary_start_time = None
-                        pending_binary_frame = None
-            else:
-                # User is moving - reset stationary timer
-                if stationary_start_time is not None:
-                    print(f"Movement detected (change={change:.3f}), resetting stationary timer...")
-                stationary_start_time = None
+                        # Send first frame immediately
+                        if arduino.is_ready():
+                            arduino.send_frame(binary)
+                            last_send_time = current_time_sec
         
-        prev_white_ratio = white_ratio
+        else:
+            # Idle - waiting for presence (enough white pixels)
+            if has_presence:
+                waiting_for_stationary = True
+                stationary_start_time = None  # Don't start timer yet - wait for stillness
+                print(f"Presence detected (white={white_ratio:.1%}), waiting for user to hold still...")
+        
+        prev_binary = binary.copy()  # Store for next frame's motion detection
         
         # -------- FPS CALCULATION --------
         frame_count += 1
