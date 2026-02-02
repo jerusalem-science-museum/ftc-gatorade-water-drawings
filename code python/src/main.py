@@ -100,7 +100,9 @@ def main():
     
     # Camera control refresh (Linux only - prevents auto-exposure from taking over)
     last_camera_refresh = time.time()
-    camera_refresh_interval = 30  # seconds
+    camera_refresh_interval = 30  # seconds after initial period
+    startup_time = time.time()
+    startup_refresh_done = False  # Aggressive refresh during first 10 seconds
     
     print("\n=== Water Drawing App ===")
     print("Controls:")
@@ -300,12 +302,23 @@ def main():
             fps_update_time = current_time
         
         # -------- PERIODIC CAMERA REFRESH (Linux) --------
-        # Re-apply camera controls periodically to prevent auto-exposure from taking over
-        if sys.platform.startswith('linux') and time.time() - last_camera_refresh > camera_refresh_interval:
-            camera_index = int(config["video_source"])
-            print("Refreshing camera controls...")
-            set_camera_controls_linux(camera_index, config)
-            last_camera_refresh = time.time()
+        # Re-apply camera controls to prevent auto-exposure from taking over
+        if sys.platform.startswith('linux'):
+            time_since_start = time.time() - startup_time
+            time_since_refresh = time.time() - last_camera_refresh
+            
+            # Aggressive refresh during first 10 seconds (every 2 seconds)
+            if time_since_start < 10 and time_since_refresh > 2:
+                camera_index = int(config["video_source"])
+                print(f"Startup camera refresh ({time_since_start:.1f}s)...")
+                set_camera_controls_linux(camera_index, config, verbose=False)
+                last_camera_refresh = time.time()
+            # Normal periodic refresh after startup
+            elif time_since_start >= 10 and time_since_refresh > camera_refresh_interval:
+                camera_index = int(config["video_source"])
+                print("Refreshing camera controls...")
+                set_camera_controls_linux(camera_index, config, verbose=False)
+                last_camera_refresh = time.time()
         
         # -------- HANDLE KEYS --------
         key = cv2.waitKey(1) & 0xFF

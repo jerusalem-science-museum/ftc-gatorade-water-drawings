@@ -11,13 +11,14 @@ from typing import Optional
 import cv2
 
 
-def set_camera_controls_linux(device_index: int, config: dict) -> None:
+def set_camera_controls_linux(device_index: int, config: dict, verbose: bool = True) -> None:
     """
     Set camera controls on Linux using v4l2-ctl.
     
     Args:
         device_index: Camera index (0, 1, 2, etc.)
         config: Configuration dictionary with camera settings.
+        verbose: Whether to print detailed output.
     """
     import subprocess
     import time
@@ -29,57 +30,76 @@ def set_camera_controls_linux(device_index: int, config: dict) -> None:
     wb_temp = config.get("camera_wb_temperature", 4600)
     gain = config.get("camera_gain", 0)
     
-    # First, disable all auto modes (must happen before setting manual values)
-    auto_disable_commands = [
-        # Disable auto-exposure (1 = manual mode for most cameras)
-        f"v4l2-ctl -d {device} --set-ctrl=exposure_auto=1",
-        # Disable auto white balance
-        f"v4l2-ctl -d {device} --set-ctrl=white_balance_temperature_auto=0",
-        # Some cameras use different control names
-        f"v4l2-ctl -d {device} --set-ctrl=white_balance_automatic=0",
-        f"v4l2-ctl -d {device} --set-ctrl=auto_white_balance=0",
-    ]
-    
-    for cmd in auto_disable_commands:
+    def try_ctrl(ctrl_str, description=""):
+        """Try to set a control, return True if successful."""
+        cmd = f"v4l2-ctl -d {device} --set-ctrl={ctrl_str}"
         try:
             result = subprocess.run(cmd, shell=True, capture_output=True, timeout=2, text=True)
             if result.returncode == 0:
-                print(f"  OK: {cmd.split('--set-ctrl=')[1]}")
+                if verbose:
+                    print(f"  OK: {ctrl_str}")
+                return True
+            else:
+                if verbose:
+                    print(f"  FAIL: {ctrl_str}")
+                return False
         except Exception:
-            pass  # Silently ignore - camera may not support this control
+            return False
+    
+    # Try multiple approaches to disable auto-exposure
+    # UVC cameras typically use:
+    # - 1 = Manual Mode
+    # - 3 = Aperture Priority Mode (auto)
+    # Control name varies: "auto_exposure" or "exposure_auto"
+    auto_exposure_disabled = False
+    
+    # Try "auto_exposure" first (common on UVC cameras)
+    if try_ctrl("auto_exposure=1"):
+        auto_exposure_disabled = True
+    # Fallback to "exposure_auto" 
+    elif try_ctrl("exposure_auto=1"):
+        auto_exposure_disabled = True
+    
+    if not auto_exposure_disabled and verbose:
+        print("  WARNING: Could not disable auto-exposure!")
+    
+    # Disable dynamic framerate (can cause exposure fluctuations)
+    try_ctrl("exposure_dynamic_framerate=0")
+    
+    # Disable auto white balance (try multiple control names)
+    try_ctrl("white_balance_temperature_auto=0")
+    try_ctrl("white_balance_automatic=0")
+    try_ctrl("auto_white_balance=0")
+    
+    # Disable auto gain if available
+    try_ctrl("gain_automatic=0")
+    try_ctrl("auto_gain=0")
     
     # Small delay to let camera apply auto-disable settings
-    time.sleep(0.1)
+    time.sleep(0.05)
     
     # Now set the manual values
-    manual_commands = [
-        (f"v4l2-ctl -d {device} --set-ctrl=exposure_absolute={exposure}", "exposure_absolute"),
-        (f"v4l2-ctl -d {device} --set-ctrl=white_balance_temperature={wb_temp}", "white_balance_temperature"),
-        (f"v4l2-ctl -d {device} --set-ctrl=gain={gain}", "gain"),
-    ]
+    # Try both naming conventions for exposure
+    try_ctrl(f"exposure_time_absolute={exposure}") or try_ctrl(f"exposure_absolute={exposure}")
+    try_ctrl(f"white_balance_temperature={wb_temp}")
+    try_ctrl(f"gain={gain}")
     
-    for cmd, name in manual_commands:
+    # Also disable backlight compensation which can affect brightness
+    try_ctrl("backlight_compensation=0")
+    
+    # Verify settings were applied (only on first call, not refreshes)
+    if verbose:
+        print(f"\nVerifying camera settings on {device}:")
+        verify_cmd = f"v4l2-ctl -d {device} --get-ctrl=auto_exposure,exposure_time_absolute,white_balance_automatic,white_balance_temperature,gain,exposure_dynamic_framerate,backlight_compensation"
         try:
-            result = subprocess.run(cmd, shell=True, capture_output=True, timeout=2, text=True)
-            if result.returncode == 0:
-                print(f"  OK: {name}")
-            else:
-                print(f"  FAIL: {name} - {result.stderr.strip()}")
+            result = subprocess.run(verify_cmd, shell=True, capture_output=True, timeout=2, text=True)
+            if result.stdout:
+                for line in result.stdout.strip().split('\n'):
+                    print(f"  {line}")
         except Exception as e:
-            print(f"  ERROR: {name} - {e}")
-    
-    # Verify settings were applied
-    print(f"\nVerifying camera settings on {device}:")
-    verify_cmd = f"v4l2-ctl -d {device} --get-ctrl=exposure_auto,exposure_absolute,white_balance_temperature_auto,white_balance_temperature,gain"
-    try:
-        result = subprocess.run(verify_cmd, shell=True, capture_output=True, timeout=2, text=True)
-        if result.stdout:
-            for line in result.stdout.strip().split('\n'):
-                print(f"  {line}")
-    except Exception as e:
-        print(f"  Could not verify: {e}")
-    
-    print(f"\nTarget values: exposure={exposure}, wb={wb_temp}, gain={gain}")
+            print(f"  Could not verify: {e}")
+        
+        print(f"\nTarget values: exposure={exposure}, wb={wb_temp}, gain={gain}")
 
 
 def init_capture(config: dict) -> Optional[cv2.VideoCapture]:
