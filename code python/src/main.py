@@ -102,7 +102,6 @@ def main():
     last_camera_refresh = time.time()
     camera_refresh_interval = 30  # seconds after initial period
     startup_time = time.time()
-    startup_refresh_done = False  # Aggressive refresh during first 10 seconds
     
     print("\n=== Water Drawing App ===")
     print("Controls:")
@@ -133,10 +132,6 @@ def main():
     else:
         print("Warning: Could not capture initial reference background")
     
-    # Track frame brightness to detect camera going dark
-    last_brightness_warning = 0
-    consecutive_dark_frames = 0
-    
     running = True
     while running:
         # -------- CAPTURE --------
@@ -144,18 +139,6 @@ def main():
         if not ret:
             print("Error: Could not read frame")
             break
-        
-        # Check if frame is very dark (camera might be auto-exposing incorrectly)
-        frame_brightness = np.mean(frame)
-        if frame_brightness < 10:  # Very dark frame
-            consecutive_dark_frames += 1
-            if consecutive_dark_frames > 30 and time.time() - last_brightness_warning > 5:
-                print(f"WARNING: Camera producing dark frames (brightness={frame_brightness:.1f})")
-                print("  - Check camera exposure settings")
-                print("  - Camera may need re-initialization")
-                last_brightness_warning = time.time()
-        else:
-            consecutive_dark_frames = 0
         
         # -------- PROCESS --------
         small, binary, gray = process_frame(frame, config, reference_bg)
