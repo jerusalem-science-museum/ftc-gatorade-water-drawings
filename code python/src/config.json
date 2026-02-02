@@ -1,0 +1,20 @@
+{
+  "video_source": 2,
+  "capture_width": 320,
+  "capture_height": 240,
+  "output_width": 64,
+  "output_height": 64,
+  "threshold": 128,
+  "threshold_step": 5,
+  "fullscreen": false,
+  "display_scale": 10,
+  "use_static_background": true,
+  "difference_threshold": 35,
+  "difference_threshold_step": 5,
+  "diff_mode": "lighter",
+  "morph_erode": 0,
+  "morph_dilate": 0,
+  "change_detection_threshold": 0.4,
+  "flip_vertical": false,
+  "flip_horizontal": false
+}
