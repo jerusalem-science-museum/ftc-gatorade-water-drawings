@@ -1,4 +1,3 @@
 pyserial
-opencv-python
-pygame
+opencv-contrib-python
 numpy
