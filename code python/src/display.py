@@ -76,10 +76,10 @@ def draw_overlay(
     display = frame.copy()
     
     # Build settings to display
-    stationary_delay = config.get("stationary_delay_ms", 500)
-    diff_mode = config.get("diff_mode", "both")
-    morph_erode = config.get("morph_erode", 0)
-    morph_dilate = config.get("morph_dilate", 0)
+    stationary_delay = config["stationary_delay_ms"]
+    diff_mode = config["diff_mode"]
+    morph_erode = config["morph_erode"]
+    morph_dilate = config["morph_dilate"]
     
     lines = [
         f"Diff Threshold: {config['difference_threshold']} (+/- to adjust)",

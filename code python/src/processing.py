@@ -30,12 +30,11 @@ def process_frame(
     Returns:
         Tuple of (resized_color_image, binary_image, grayscale_image).
     """
-    # Apply flips if configured
-    if config.get("flip_vertical", False):
+    if config["flip_vertical"]:
         frame = cv2.flip(frame, 0)
-    if config.get("flip_horizontal", False):
+    if config["flip_horizontal"]:
         frame = cv2.flip(frame, 1)
-    
+
     # Resize to output dimensions (aspect ratio ignored to match valve array)
     output_size = (config["output_width"], config["output_height"])
     small = cv2.resize(frame, output_size, interpolation=cv2.INTER_AREA)
@@ -46,7 +45,7 @@ def process_frame(
     # Apply static background subtraction
     if reference_bg is not None:
         # Compute difference based on diff_mode
-        diff_mode = config.get("diff_mode", "both")  # "both", "lighter", "darker"
+        diff_mode = config["diff_mode"]
         
         if diff_mode == "lighter":
             # Only detect pixels brighter than reference (hand lighter than bg)
@@ -65,8 +64,8 @@ def process_frame(
         binary = np.zeros_like(gray)
     
     # Apply morphological operations if enabled
-    morph_erode = config.get("morph_erode", 0)
-    morph_dilate = config.get("morph_dilate", 0)
+    morph_erode = config["morph_erode"]
+    morph_dilate = config["morph_dilate"]
     
     if morph_erode > 0 or morph_dilate > 0:
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
@@ -92,12 +91,11 @@ def capture_reference_background(
     Returns:
         Grayscale reference background at output resolution.
     """
-    # Apply flips if configured
-    if config.get("flip_vertical", False):
+    if config["flip_vertical"]:
         frame = cv2.flip(frame, 0)
-    if config.get("flip_horizontal", False):
+    if config["flip_horizontal"]:
         frame = cv2.flip(frame, 1)
-    
+
     # Resize to output dimensions
     output_size = (config["output_width"], config["output_height"])
     small = cv2.resize(frame, output_size, interpolation=cv2.INTER_AREA)

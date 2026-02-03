@@ -1,0 +1,83 @@
+# Water Drawing App - Configuration
+# Edit this file or adjust values at runtime (press 's' to save)
+
+# --- CAMERA ---
+# Device index for OpenCV (0 = first camera, 2 = third camera, etc.)
+video_source: 1
+
+# Resolution for capture from camera (lower = less USB bandwidth, faster)
+capture_width: 320
+capture_height: 240
+
+# --- OUTPUT / VALVE ARRAY / ARDUINO ---
+# Resolution of the binary image sent to Arduino (must match valve array layout)
+output_width: 64
+output_height: 64
+
+# Number of valve cassettes (physical hardware)
+num_cassettes: 1
+
+# Milliseconds each row's valves stay on when drawing (affects water droplet size)
+valve_on_time_ms: 1
+
+# Max frames per second sent to Arduino (rate limit)
+arduino_send_fps: 1
+
+# ------------- ARDUINO -----------------
+# Serial port (null = auto-detect). Examples: "COM3", "/dev/ttyUSB0"
+arduino_port: null
+
+# Force mock mode (no real Arduino, just print to console)
+arduino_mock: false
+
+# Layers per image (sent once at session start; API param drawing_depth)
+drawing_depth: 1
+
+# ---------- DISPLAY ------------
+# Scale factor for preview (output 64x64 scaled up for visibility)
+display_scale: 10
+
+# Start in fullscreen mode
+fullscreen: false
+
+# Mirror the image (useful if camera is mounted backwards)
+flip_vertical: false
+flip_horizontal: false
+
+# ------ BACKGROUND SUBTRACTION -------
+# Pixel difference threshold (0-255). Higher = less sensitive, fewer false positives
+difference_threshold: 35
+
+# Step size when adjusting threshold with +/- keys
+difference_threshold_step: 5
+
+# What to detect: "both" (any change), "lighter" (hand brighter than bg), "darker" (shadows)
+diff_mode: lighter
+
+# Morphological ops to clean up binary: erode removes noise, dilate fills gaps
+morph_erode: 0
+morph_dilate: 0
+
+# --------- PRESENCE & STREAMING --------
+# Minimum fraction of white pixels (0-1) to consider "presence detected"
+min_presence_threshold: 0.2
+
+# Max pixel change ratio (0-1) to consider frame "stationary" (ready to send)
+stationary_threshold: 0.02
+
+# How long (ms) user must hold still before streaming starts
+stationary_delay_ms: 500
+
+# If true, only send frames when stationary; if false, stream continuously while present
+require_stationary_for_send: true
+
+
+# ------- CAMERA CONTROLS (LINUX V4L2) ------
+# Manual exposure value (camera-dependent)
+camera_exposure: 157
+
+# White balance temperature in Kelvin (e.g. 4600 = daylight)
+camera_wb_temperature: 4600
+
+# Manual gain (0 = auto or default)
+camera_gain: 0

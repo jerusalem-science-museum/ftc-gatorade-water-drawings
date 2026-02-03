@@ -25,10 +25,9 @@ def set_camera_controls_linux(device_index: int, config: dict, verbose: bool = T
     
     device = f"/dev/video{device_index}"
     
-    # Get configured values or use defaults
-    exposure = config.get("camera_exposure", 157)
-    wb_temp = config.get("camera_wb_temperature", 4600)
-    gain = config.get("camera_gain", 0)
+    exposure = config["camera_exposure"]
+    wb_temp = config["camera_wb_temperature"]
+    gain = config["camera_gain"]
     
     def try_ctrl(ctrl_str, description=""):
         """Try to set a control, return True if successful."""
