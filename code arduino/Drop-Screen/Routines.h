@@ -71,7 +71,7 @@ void init_drawing() {
   pulse_io(SR_st_pin);
   led_on_flag = false;
   drawing_flag = true;
-//  Serial.println("drawing...");
+  Serial.println("drawing...");
 }
 
 bool check_drawing() {

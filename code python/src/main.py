@@ -13,8 +13,10 @@ import time
 from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
+import os
 
 import cv2
+from PyQt5.QtCore import QLibraryInfo
 import numpy as np
 
 # Import application modules
@@ -24,6 +26,9 @@ from processing import process_frame, capture_reference_background
 from display import create_stacked_display, draw_overlay, set_fullscreen
 from arduino import ArduinoSender
 
+os.environ["QT_QPA_PLATFORM_PLUGIN_PATH"] = QLibraryInfo.location(
+    QLibraryInfo.PluginsPath
+)
 
 # ---------------------------------------------------------------------------
 # Loop state (bundled to shorten param lists)

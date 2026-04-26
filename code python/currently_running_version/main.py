@@ -10,7 +10,7 @@ import pygame
 import numpy as np
 from pygame.locals import *
 from consts import *
-import randomq
+import random
 import json
 
 # Initialisation des réglages manuels
@@ -23,8 +23,6 @@ def set_manual_controls(exposure, wb_temp, gain):
     os.system(f"v4l2-ctl -d {DEVICE} --set-ctrl=exposure_time_absolute={exposure}")
     os.system(f"v4l2-ctl -d {DEVICE} --set-ctrl=white_balance_temperature={wb_temp}")
     os.system(f"v4l2-ctl -d {DEVICE} --set-ctrl=gain={gain}")
-
-
 
 
 # Callback pour les sliders
@@ -70,6 +68,7 @@ def msg_on_screen():
         screen.blit(text_surface, text_rect)
         y_position += font_size
 
+
 # display message on screen when the camera mode is on (showing the image and the black and white filter of the image)
 def msg_on_screen2():
     global font2, screen
@@ -78,6 +77,7 @@ def msg_on_screen2():
     text_rect = text_surface.get_rect()
     text_rect.center = (screen_width * 3 // 4, screen_height - 30)
     screen.blit(text_surface, text_rect)
+
 
 # take a picture from the camera and return it
 def take_picture():
@@ -233,10 +233,9 @@ while True:
         pass
 
 
-
 pygame.init()  # initialize pygame
-#screen_width, screen_height = 720, 640  # the width and height of the window to display the images on
-#screen = pygame.display.set_mode((screen_width, screen_height))  # set the window size
+# screen_width, screen_height = 720, 640  # the width and height of the window to display the images on
+# screen = pygame.display.set_mode((screen_width, screen_height))  # set the window size
 screen_width, screen_height = pygame.display.Info().current_w, pygame.display.Info().current_h # the width and height of the window to display the images on
 screen = pygame.display.set_mode((screen_width, screen_height),pygame.FULLSCREEN)  # set the window size
 pygame.display.set_caption("Camera")  # set the window title
@@ -246,7 +245,7 @@ if found_arduino:
     arduino.reset_input_buffer()
     arduino.reset_output_buffer()
     time.sleep(0.1) # wait for the serial buffer to clear
-    
+
 font_size = 40  # the font size for the messages on the screen
 font2_size = 40  # the font size for the messages on the screen when the camera mode is on
 font = pygame.font.Font(None, font_size)  # Use default system font

@@ -55,8 +55,8 @@ difference_threshold_step: 5
 diff_mode: lighter
 
 # Morphological ops to clean up binary: erode removes noise, dilate fills gaps
-morph_erode: 0
-morph_dilate: 0
+morph_erode: 1
+morph_dilate: 1
 
 # --------- PRESENCE & STREAMING --------
 # Minimum fraction of white pixels (0-1) to consider "presence detected"
