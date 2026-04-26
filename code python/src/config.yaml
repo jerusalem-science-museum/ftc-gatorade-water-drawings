@@ -12,7 +12,7 @@ capture_height: 240
 # --- OUTPUT / VALVE ARRAY / ARDUINO ---
 # Resolution of the binary image sent to Arduino (must match valve array layout)
 output_width: 64
-output_height: 64
+output_height: 32
 
 # Number of valve cassettes (physical hardware)
 num_cassettes: 1
