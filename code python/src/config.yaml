@@ -3,7 +3,7 @@
 
 # --- CAMERA ---
 # Device index for OpenCV (0 = first camera, 2 = third camera, etc.)
-video_source: 1
+video_source: 2
 
 # Resolution for capture from camera (lower = less USB bandwidth, faster)
 capture_width: 320

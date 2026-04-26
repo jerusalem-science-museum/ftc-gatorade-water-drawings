@@ -83,7 +83,7 @@ def draw_overlay(
     
     lines = [
         f"Diff Threshold: {config['difference_threshold']} (+/- to adjust)",
-        f"Diff Mode: {diff_mode} (d=cycle)",
+        f"Diff Mode: {diff_mode} (m=cycle)",
         f"Morph: erode={morph_erode} dilate={morph_dilate} (e/E, l/L)",
         f"FPS: {fps:.1f}  White: {white_ratio * 100:.1f}%",
         f"Ref BG: {'SET' if has_reference_bg else 'NOT SET'} (r to capture)",
