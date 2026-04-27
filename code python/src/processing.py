@@ -101,6 +101,7 @@ def preprocess_idle_image(path: str, config: dict) -> Optional[np.ndarray]:
     gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
     threshold = config.get("idle_image_threshold", 128)
     _, binary = cv2.threshold(gray, threshold, 255, cv2.THRESH_BINARY)
+    binary = 255 - binary # swap black to white i.e. to draw
     return binary
 
 
