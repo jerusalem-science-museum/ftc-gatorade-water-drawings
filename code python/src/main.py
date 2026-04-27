@@ -8,6 +8,8 @@ Key design: Display loop is decoupled from Arduino communication.
 Display NEVER waits for Arduino - user always sees real-time video.
 """
 
+import os
+import random
 import sys
 import time
 from dataclasses import dataclass
@@ -21,7 +23,7 @@ import numpy as np
 # Import application modules
 from config import get_config_path, load_config, save_config
 from capture import init_capture, set_camera_controls_linux
-from processing import process_frame, capture_reference_background
+from processing import process_frame, capture_reference_background, preprocess_idle_image
 from display import create_stacked_display, draw_overlay, set_fullscreen
 from arduino import ArduinoSender
 
@@ -98,8 +100,36 @@ class WaterDrawingApp:
         )
         self.overlay_visible = False
 
+        self.empty_streak = 0
+        self.idle_index = 0
+        self.idle_images: list[str] = self._load_idle_images()
+
         self._print_controls()
         self._capture_initial_reference()
+
+    def _load_idle_images(self) -> list[str]:
+        """Discover PNG/JPG files in idle_images_dir (relative to config file)."""
+        rel_dir = self.config.get("idle_images_dir")
+        if not rel_dir:
+            return []
+        base = os.path.dirname(os.path.abspath(self.config_path))
+        idle_dir = os.path.join(base, rel_dir)
+        if not os.path.isdir(idle_dir):
+            print(f"[Idle] Directory not found: {idle_dir} (idle PNG rotation disabled)")
+            return []
+        exts = (".png", ".jpg", ".jpeg")
+        files = sorted(
+            os.path.join(idle_dir, f)
+            for f in os.listdir(idle_dir)
+            if f.lower().endswith(exts)
+        )
+        print(f"[Idle] Loaded {len(files)} idle images from {idle_dir}")
+        return files
+
+    def _random_cassette(self) -> int:
+        """Pick a random cassette index in [0, cassettes_num) for visual variety."""
+        n = max(1, self.config.get("cassettes_num", 1))
+        return random.randint(0, n - 1)
 
     def _print_controls(self) -> None:
         print("\n=== Water Drawing App ===")
@@ -241,13 +271,13 @@ class WaterDrawingApp:
                     elapsed_stationary_ms = (current_time_sec - start_time) * 1000
                     stationary_ready = elapsed_stationary_ms >= stationary_delay_ms
                     if stationary_ready and fps_ready and ard.is_ready():
-                        ard.send_frame(binary)
+                        ard.send_frame(binary, cassette=self._random_cassette())
                         last_send = current_time_sec
                         start_time = None
                         print(f"Sent frame (stationary for {elapsed_stationary_ms:.0f}ms)")
             else:
                 if ard.is_ready() and (current_time_sec - last_send) >= send_interval:
-                    ard.send_frame(binary)
+                    ard.send_frame(binary, cassette=self._random_cassette())
                     last_send = current_time_sec
 
         elif waiting:
@@ -273,7 +303,7 @@ class WaterDrawingApp:
                         waiting = False
                         start_time = None
                         if ard.is_ready():
-                            ard.send_frame(binary)
+                            ard.send_frame(binary, cassette=self._random_cassette())
                             last_send = current_time_sec
 
         else:
@@ -290,6 +320,48 @@ class WaterDrawingApp:
             prev_binary=s.prev_binary,
         )
 
+
+    def _handle_empty_frame(self, current_time_sec: float) -> None:
+        """
+        Idle behavior when no presence is detected.
+
+        FPS-gated: increment empty_streak. Below empty_captures_before_idle,
+        re-drop whatever's in the Arduino's buffer (the previous silhouette
+        keeps appearing for a moment when a hand leaves). Once the streak
+        reaches the threshold, rotate through idle PNGs.
+        """
+        cfg = self.config
+        ard = self.arduino
+        s = self.streaming_state
+        arduino_send_fps = cfg["arduino_send_fps"]
+        send_interval = 1.0 / arduino_send_fps if arduino_send_fps > 0 else 0
+        if (current_time_sec - s.last_send_time) < send_interval:
+            return
+        if not ard.is_ready():
+            return
+
+        self.empty_streak += 1
+        threshold = cfg["empty_captures_before_idle"]
+
+        if self.empty_streak < threshold:
+            ard.drop_current_buffer()
+        elif self.idle_images:
+            path = self.idle_images[self.idle_index % len(self.idle_images)]
+            binary = preprocess_idle_image(path, cfg)
+            if binary is not None:
+                ard.send_frame(binary, cassette=self._random_cassette())
+                print(f"[Idle] Sent {os.path.basename(path)}")
+            self.idle_index += 1
+        else:
+            ard.drop_current_buffer()
+
+        self.streaming_state = StreamingState(
+            waiting_for_stationary=s.waiting_for_stationary,
+            is_streaming=s.is_streaming,
+            stationary_start_time=s.stationary_start_time,
+            last_send_time=current_time_sec,
+            prev_binary=s.prev_binary,
+        )
 
     def _update_fps(self) -> None:
         """Update FPS every second; mutates self.fps_state."""
@@ -347,7 +419,7 @@ class WaterDrawingApp:
             print(f"Morph dilate: {cfg['morph_dilate']}")
         elif key == ord(' '):
             print("Manual send triggered")
-            self.arduino.send_frame(binary)
+            self.arduino.send_frame(binary, cassette=self._random_cassette())
         return True, RefAction.NONE
 
 
@@ -373,10 +445,20 @@ class WaterDrawingApp:
             has_presence = white_ratio > min_presence
             is_stationary = is_currently_still
             current_time_sec = time.time()
+            if has_presence:
+                self.empty_streak = 0
             self._update_streaming_state(
                 has_presence, is_stationary, current_time_sec, binary,
                 white_ratio, pixel_change_ratio
             )
+            # No presence and the streaming state machine has cleared its flags →
+            # idle: re-drop the buffer or rotate through idle PNGs (FPS-gated).
+            if (
+                not has_presence
+                and not self.streaming_state.is_streaming
+                and not self.streaming_state.waiting_for_stationary
+            ):
+                self._handle_empty_frame(current_time_sec)
             self.streaming_state.prev_binary = binary.copy()
 
             self._update_fps()

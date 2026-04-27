@@ -77,6 +77,33 @@ def process_frame(
     return small, binary, gray
 
 
+def preprocess_idle_image(path: str, config: dict) -> Optional[np.ndarray]:
+    """
+    Load a PNG/JPG and return a binary image at output resolution, ready for send_frame.
+
+    Mirrors the deployed `process_and_save_image` path: imread → resize to
+    (output_width, output_height) → grayscale → binary threshold. Uses
+    `idle_image_threshold` from config (separate from the camera diff threshold,
+    since idle PNGs are static art rather than camera frames).
+
+    Args:
+        path: Path to the image file.
+        config: Configuration with output_width, output_height, idle_image_threshold.
+
+    Returns:
+        Binary uint8 image (values 0 or 255), or None if the file failed to load.
+    """
+    img = cv2.imread(path)
+    if img is None:
+        return None
+    output_size = (config["output_width"], config["output_height"])
+    small = cv2.resize(img, output_size, interpolation=cv2.INTER_AREA)
+    gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
+    threshold = config.get("idle_image_threshold", 128)
+    _, binary = cv2.threshold(gray, threshold, 255, cv2.THRESH_BINARY)
+    return binary
+
+
 def capture_reference_background(
     frame: np.ndarray,
     config: dict

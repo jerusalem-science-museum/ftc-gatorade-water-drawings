@@ -43,7 +43,9 @@ Send only when the Arduino is **not** drawing. Wait for **`r`** (ready) before s
 ### Send new image then drop — `s`
 
 - Send one byte: **`s`** (0x73).
+- Then send **one byte**: `cassette` index (0 .. `cassettes_num` − 1). The firmware uses this to horizontally offset the drop by `cassette × image_w` shift-register pulses, so each frame can fall in a different physical cassette.
 - Then send **exactly** `image_h × 8` bytes of image data (e.g. 320 bytes for height 40).
+- Then send **one byte**: **`e`** (0x65, END_KEY) — terminator. The firmware reads this byte; if it's not `e` the firmware silently continues, but the host should always send it.
 - Arduino may send **`g`** after every **8** image bytes (flow control).
 - After the last byte, Arduino waits 10 ms then starts the drawing.
 
@@ -77,8 +79,6 @@ Example: for 64×40, send 40×8 = **320 bytes**, row 0 bytes 0–7, row 1 bytes 
 2. Send **3 bytes:** `image_h`, `valve_on_time`, `drawing_depth`.
 3. For each frame:
    - **Re-drop:** send `d`.
-   - **New image:** send `s` then `image_h × 8` bytes (row-major, 8 px/byte, MSB first).
+   - **New image:** send `s`, then 1 cassette byte, then `image_h × 8` image bytes (row-major, 8 px/byte, MSB first), then `e`.
 4. Optionally use `g` (every 8 bytes) for flow control.
 5. Wait for **`r`** before the next command.
-
-**Note:** `e` (END_KEY) is defined in the Arduino code but not used; it is not part of this API.

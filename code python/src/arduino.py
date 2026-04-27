@@ -15,6 +15,7 @@ import numpy as np
 # Drop-Screen Arduino API constants (encode to bytes when writing/reading)
 CMD_DROP = "d"  # drop current buffer
 CMD_SEND_IMAGE = "s"  # send new image then drop
+END_BYTE = "e"  # terminator after image bytes (firmware reads & checks)
 READY_BYTE = "r"  # Arduino ready for next command
 GO_BYTE = "g"  # after every 8 image bytes (flow control)
 ARDUINO_WIDTH = 64  # Width fixed on Arduino
@@ -157,9 +158,15 @@ class ArduinoSender:
     def is_ready(self) -> bool:
         """
         Non-blocking check if Arduino can accept a new frame.
-        Reads bytes from serial; each 'r' (READY_BYTE) sets ready, 'g' is flow control.
-        Returns:
-            True if Arduino is ready to receive, False otherwise.
+
+        Drains everything in the input buffer in one read; if any byte is 'r'
+        (READY_BYTE), the next send is allowed. Other bytes — flow-control 'g',
+        firmware text prints like "drawing..." or parameter echoes — are
+        consumed and discarded so the buffer never backs up.
+
+        Note: text prints can contain 'r' as a substring (e.g. "drawing"), so
+        ready may be set slightly before drawing actually finishes. The
+        arduino_send_fps gate in the host loop is the real pacing mechanism.
         """
         if self._mock:
             return True
@@ -167,22 +174,24 @@ class ArduinoSender:
         if self._serial is None or not self._serial.is_open:
             return False
 
-        while self._serial.in_waiting > 0:
-            b = self._serial.read(1)
-            if not b:
-                break
-            if b == READY_BYTE.encode():
+        if self._serial.in_waiting > 0:
+            data = self._serial.read(self._serial.in_waiting)
+            if READY_BYTE.encode() in data:
                 self._ready = True
-            # GO_BYTE (g) can be ignored or used for pacing; we just drain it
 
         return self._ready
     
-    def send_frame(self, binary_image: np.ndarray) -> bool:
+    def send_frame(self, binary_image: np.ndarray, cassette: int = 0) -> bool:
         """
-        Send new image then drop (API command 's'): one byte 's' then image_h×8 bytes.
+        Send new image then drop. Wire sequence: 's' + cassette byte + image bytes + 'e'.
         Call only when is_ready() is True.
+
         Args:
             binary_image: Binary (black/white) image, row-major, 64 columns expected.
+            cassette: Which physical cassette to drop in. The firmware uses this
+                to offset the column horizontally (cassette * image_w shift-register
+                pulses). Range: 0 .. cassettes_num - 1.
+
         Returns:
             True if send was successful, False otherwise.
         """
@@ -191,7 +200,10 @@ class ArduinoSender:
 
         if self._mock:
             white_pct = np.sum(binary_image) / (w * h * 255) * 100
-            print(f"\n[MOCK] Send {len(byte_array)} bytes ({w}x{h}), {white_pct:.1f}% white")
+            print(
+                f"\n[MOCK] Send {len(byte_array)} bytes ({w}x{h}), "
+                f"{white_pct:.1f}% white, cassette={cassette}"
+            )
             self._print_ascii_preview(binary_image)
             return True
 
@@ -199,16 +211,27 @@ class ArduinoSender:
             return False
 
         try:
+            # Drop any stale firmware output (parameter echoes, "drawing..." prints,
+            # leftover flow-control bytes) before starting a fresh frame.
+            self._serial.flush()
+            self._serial.reset_input_buffer()
+            self._serial.reset_output_buffer()
+
+            # Frame header: 's' + cassette index byte
             self._serial.write(CMD_SEND_IMAGE.encode())
-            # Send image in chunks of 8 bytes; optionally drain one 'g' per chunk
+            self._serial.write(bytes([cassette & 0xFF]))
+
+            # Image body in 8-byte chunks; drain any 'g' flow-control bytes per chunk.
             n = len(byte_array)
             for i in range(0, n, 8):
-                chunk = byte_array[i : i + 8]
-                self._serial.write(chunk)
+                self._serial.write(byte_array[i : i + 8])
                 self._serial.flush()
-                # Optionally wait for 'g' (flow control) - non-blocking drain
                 if self._serial.in_waiting > 0:
-                    self._serial.read(1)
+                    self._serial.read(self._serial.in_waiting)
+
+            # Trailing END_KEY tells the firmware the image stream is complete.
+            self._serial.write(END_BYTE.encode())
+            self._serial.flush()
             self._ready = False
             return True
         except serial.SerialException as e:
