@@ -456,7 +456,7 @@ while(running):
     elif found_arduino and not arduino_done:  # check if the arduino is done processing the previous image and ready to receive the next image
         if arduino.in_waiting > 0:  # if there is data in the serial buffer
             received_data = arduino.readline().decode().rstrip()
-            # print("Received from Arduino:", received_data) # print the response from the arduino (for debugging)
+            print("Received from Arduino:", received_data) # print the response from the arduino (for debugging)
             arduino_done = True  # the arduino is done processing the image and ready to receive the next image
     elif not camera_on:  # if the camera mode is off, display the messages on the screen
         screen.fill((0, 0, 0))

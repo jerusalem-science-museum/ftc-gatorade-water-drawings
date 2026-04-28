@@ -71,6 +71,9 @@ void init_drawing() {
 //  Serial.println("drawing...");
 }
 
+/**
+* 
+*/
 bool check_drawing() {
   if (!valve_on_flag) {
     if (row_in_drawing == -1)

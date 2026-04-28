@@ -30,7 +30,7 @@ arduino_send_fps: 1
 arduino_port: null
 
 # Force mock mode (no real Arduino, just print to console)
-arduino_mock: false
+arduino_mock: true
 
 # Layers per image (sent once at session start; API param drawing_depth)
 drawing_depth: 1

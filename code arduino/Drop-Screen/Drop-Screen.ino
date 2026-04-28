@@ -14,45 +14,12 @@ void setup() {
   digitalWrite(SR_data_pin, LOW);
   off_all_valves(num_of_valves);
   pulse_io(SR_st_pin);
-//  pinMode(encoder_sw, INPUT_PULLUP);
-//  pinMode(encoder_pinA, INPUT); 
-//  pinMode(encoder_pinB, INPUT); 
   pinMode(red_led_pin, OUTPUT);
   pinMode(green_led_pin, OUTPUT);
   pinMode(blue_led_pin, OUTPUT);
   led_off();
   
-//  start_display();
   digitalWrite(SR_en_pin, LOW);
-  // get variables:
-//  display_vars_collect();
-//  uint16_t last_collect = millis();
-//  delay(2000);
-//  while (Serial.available() == 0) {
-//    delay(10);
-////    if (millis() - last_collect > 8000) {
-////      display_vars_error();
-////      delay(5000);
-//////      display_vars_collect();
-////      last_collect = millis();
-////    }
-////  }
-//  byte value;
-//  Serial.readBytes((char *)&value, sizeof(value)); // Read the float value from serial
-//  Serial.println(value);
-  //get number of variables - serial is not empty because of loop
-  // super duper important:
-//  if (!collect_variables()) {
-//    display_vars_more_error();
-//    delay(4000);
-//  }
-//  else {
-//    Serial.write(GOOD_KEY);
-////    display_vars_good();
-//    delay(1000);
-//    display_done();
-//  }
-//  display_done();
   got_param = false;
   Serial.println("START");
 }
@@ -61,7 +28,6 @@ void loop() {
 
   if (!got_param && Serial.available()) {
     byte value;
-//    Serial.readBytes((char *)&value, sizeof(value));
     value = Serial.read();
     Serial.println(value);
     switch(param_index) {
@@ -86,38 +52,36 @@ void loop() {
     }
     else {
       if (key == START_KEY) {
+        Serial.println("START READ IMAGE");
         delay(TIME_DELAY_ARDUINO);
-//        uint32_t start_time = millis();
         cassette_drawing = Serial.read();
-//        cassette_drawing = 0;
         byte data;
-        for (int i = 0; i < image_h*image_w/8; i++) {
-//          if (millis() - start_time > MAX_TIME_TO_COLLECT_DATA) {
-////            display_error();
-//            break;
-//          }
+        Serial.println("got cassette value"); 
+        Serial.println(cassette_drawing); 
+        int num_bytes = image_h*image_w/8;
+        for (int i = 0; i < num_bytes; i++) {
           if (Serial.available() == 0) {
             i--;
             continue;
           }
           data = Serial.read();
           image[i] = data;
-          
-  //        Serial.println(data, DEC);
-  //        Serial.print(data); 
-  //        Serial.write(data);
+          Serial.print("currently at byte");
+          Serial.print(i);
+          Serial.print("/");
+          Serial.println(num_bytes);
+
           if ((i + 1) % 8 == 0) {
-            Serial.write(GOOD_KEY);
-  //          Serial.write(image[i]);
-  //        Serial.println();
-  //        for (int j = 7; j >=0; j--) {
-  //          Serial.write(image[i-j]);
-  //        }
+            Serial.println(GOOD_KEY);
           }
         }
         delay(TIME_DELAY_ARDUINO);
         if (Serial.read() != END_KEY) {
-//          display_error();
+          Serial.println("didn't get end key");
+        }
+        else
+        {
+          Serial.println("got end key");
         }
         init_drawing();
       }
@@ -149,7 +113,7 @@ void loop() {
       color += 1;
       if (color >= colors_num)
         color = 0;
-      Serial.write(READY_KEY);
+      Serial.println(READY_KEY);
     }
   }
 }

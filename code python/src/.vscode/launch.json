@@ -10,13 +10,6 @@
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal"
-        },        
-        {
-            "name": "run main",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "${workspaceFolder}/code python/src/main.py",
-            "console": "integratedTerminal"
         }
     ]
 }
