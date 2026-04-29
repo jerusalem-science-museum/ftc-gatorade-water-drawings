@@ -102,7 +102,7 @@ void loop() {
           bytepos = 0;
         } else {
           image[bytepos++] = data;
-          Serial.println(data);
+          // Serial.println(data);
           if ((bytepos) % 8 == 0)
             Serial.println(GOOD_KEY);
         }

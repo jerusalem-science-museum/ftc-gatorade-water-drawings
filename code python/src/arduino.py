@@ -258,7 +258,7 @@ class ArduinoSender:
                 if w > ARDUINO_WIDTH
                 else np.pad(img, ((0, 0), (0, ARDUINO_WIDTH - w)), constant_values=0)
             )
-        flat = (img.flatten() > 0).astype(np.uint8)
+        flat = (img.flatten() == 0).astype(np.uint8)
         packed = np.packbits(flat, bitorder="big")
         return packed.tobytes()
 
