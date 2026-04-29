@@ -22,6 +22,7 @@
 
 #define INTERNAL_LED 13
 #define BAUDRATE 115200
+#define MAX_IMAGE_SIZE_IN_BYTES 320
 
 const byte max_cassettes = 32;
 const byte boards_per_cassette = 4;
@@ -54,7 +55,7 @@ uint32_t last_led_on = 0;  // last time led started
 
 signed char row_in_drawing = image_h - 1; //which row in the drawing is currently dropped (from bottom to top)
 byte cassette_drawing = 0; //in which cassette is the image being dropped 
-byte image[320];  // buffer image - max of 64X40 pixels (divided by 8 for bytes)
+byte image[MAX_IMAGE_SIZE_IN_BYTES];  // buffer image - max of 64X40 pixels (divided by 8 for bytes)
 
 byte param_index = 0;
 bool got_param = false;  // got inital parameters

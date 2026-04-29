@@ -127,10 +127,11 @@ class ArduinoSender:
 
     def _write_to_ard(self, msg):
         assert self._serial, "serial uninitialized"
-        print(f"[PI->ARD] {msg}")
         if isinstance(msg, str):
+            print(f"[PI->ARD] {msg}")
             self._serial.write(msg.encode())
         elif isinstance(msg, bytes):
+            print(".", end="")
             self._serial.write(msg)
         else:
             print(f"could write to ard {msg}")
@@ -196,20 +197,23 @@ class ArduinoSender:
             n = len(byte_array)
             for i in range(0, n, 8):
                 self._write_to_ard(byte_array[i : i + 8])
-                
+
                 self._serial.flush()
                 try:
                     self._go_queue.get(timeout=2.0)
                 except queue.Empty:
-                    print(f"[Arduino] timeout waiting for 'g' after bytes {i}-{i+8}/{n}")
+                    print(
+                        f"[Arduino] timeout waiting for 'g' after bytes {i}-{i+8}/{n}"
+                    )
                     raise NotImplementedError  # or break, depending on how you want to handle it
-                print(f'bytes {i}-{i+8}/{n}')
-
+                # print(f'bytes {i}-{i+8}/{n}')
 
             # Trailing END_KEY tells the firmware the image stream is complete.
+            self.ready = (
+                False  # make sure no race condition with arduino sending readykey.
+            )
             self._write_to_ard(END_BYTE.encode())
             self._serial.flush()
-            self.ready = False
             return True
         except serial.SerialException as e:
             print(f"[Arduino] Send error: {e}")
@@ -285,6 +289,10 @@ class ArduinoSender:
                 continue
             elif line == READY_BYTE:
                 self.ready = True
+                print(f"[ARD->PI] {line}")
             elif line == GO_BYTE:
                 self._go_queue.put(1)
-            print(f"[ARD->PI] {line}")
+                print(GO_BYTE,end='')
+            else:
+                print(f"[ARD->PI] {line}")
+            

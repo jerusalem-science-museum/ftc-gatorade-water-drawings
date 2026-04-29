@@ -64,6 +64,7 @@ class WaterDrawingApp:
             self.cap.read()
         ret, init_frame = self.cap.read()
         if ret:
+            init_frame = cv2.rotate(init_frame, cv2.ROTATE_90_CLOCKWISE)
             self.reference_bg = capture_reference_background(init_frame, self.config)
             print("Initial reference background captured!")
         else:
@@ -141,6 +142,7 @@ class WaterDrawingApp:
             if not ret:
                 print("Error: Could not read frame")
                 break
+            frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
 
             _small, binary, gray = process_frame(frame, self.config, self.reference_bg)
             metrics = self._compute_frame_metrics(binary)
