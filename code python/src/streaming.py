@@ -61,7 +61,7 @@ class StreamingController:
             last_send_time=0.0,
             prev_binary=None,
         )
-        self.empty_streak = 0
+        self.replay_drops_sent = 0
         self.idle_index = 0
         self.idle_images: list[str] = self._load_idle_images()
 
@@ -79,7 +79,7 @@ class StreamingController:
     def tick(self, metrics: FrameMetrics) -> None:
         """One per-frame step: state machine + idle behavior + prev_binary update."""
         if metrics.has_presence:
-            self.empty_streak = 0
+            self.replay_drops_sent = 0
 
         self._update_streaming_state(metrics)
 
@@ -212,11 +212,9 @@ class StreamingController:
         if not ard.ready:
             return
 
-        self.empty_streak += 1
-        threshold = cfg["empty_captures_before_idle"]
-
-        if self.empty_streak < threshold:
+        if self.replay_drops_sent < cfg["replay_drops_before_idle"]:
             ard.drop_current_buffer()
+            self.replay_drops_sent += 1
         elif self.idle_images:
             path = self.idle_images[self.idle_index % len(self.idle_images)]
             binary = preprocess_idle_image(path, cfg)

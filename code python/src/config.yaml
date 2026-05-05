@@ -23,7 +23,7 @@ cassettes_num: 10
 valve_on_time_ms: 1
 
 # Max frames per second sent to Arduino (rate limit)
-arduino_send_fps: 1
+arduino_send_fps: 0.5
 
 # ------------- ARDUINO -----------------
 # Serial port (null = auto-detect). Examples: "COM3", "/dev/ttyUSB0"
@@ -44,7 +44,7 @@ fullscreen: false
 
 # Mirror the image (useful if camera is mounted backwards)
 flip_vertical: false
-flip_horizontal: false
+flip_horizontal: true
 
 # ------ BACKGROUND SUBTRACTION -------
 # Pixel difference threshold (0-255). Higher = less sensitive, fewer false positives
@@ -74,10 +74,10 @@ stationary_delay_ms: 500
 require_stationary_for_send: true
 
 # --------- IDLE MODE (no presence) ---------
-# Empty frames in a row before the host starts sending idle PNGs. Below this
-# count, the host re-drops whatever's already in the Arduino's buffer (so the
-# previous silhouette keeps appearing briefly when a hand leaves).
-empty_captures_before_idle: 3
+# Number of drops to re-send the last silhouette after presence ends, before
+# switching to idle PNGs. Each unit = one actual drop sent to the Arduino,
+# independent of camera FPS.
+replay_drops_before_idle: 3
 
 # Threshold (0-255) applied to grayscale of idle PNGs to make them binary.
 # Bright pixels (> threshold) become valves-on.

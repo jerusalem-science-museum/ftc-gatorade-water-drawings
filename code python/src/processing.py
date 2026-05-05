@@ -96,7 +96,7 @@ def preprocess_idle_image(path: str, config: dict) -> Optional[np.ndarray]:
     img = cv2.imread(path)
     if img is None:
         return None
-    # img = cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE)
+    # img = cv2.rotate(img, cv2.ROTATE_90_COUNTERCLOCKWISE)
     output_size = (config["output_width"], config["output_height"])
     small = cv2.resize(img, output_size, interpolation=cv2.INTER_AREA)
     gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
