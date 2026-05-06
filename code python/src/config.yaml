@@ -40,7 +40,7 @@ drawing_depth: 1
 display_scale: 10
 
 # Start in fullscreen mode
-fullscreen: false
+fullscreen: true
 
 # Mirror the image (useful if camera is mounted backwards)
 flip_vertical: false

@@ -133,7 +133,7 @@ cat > "$AUTOSTART_FILE" << EOF
 [Desktop Entry]
 Type=Application
 Name=Kiosk App
-Exec=lxterminal -e $REPO_DIR/run.sh
+Exec=lxterminal -e '$REPO_DIR/run.sh'
 X-GNOME-Autostart-enabled=true
 EOF
 
