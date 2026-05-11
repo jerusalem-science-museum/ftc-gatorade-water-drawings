@@ -273,11 +273,11 @@ class ArduinoSender:
         row_step = max(1, h // 10)
         col_step = max(1, w // 32)
 
-        print("-" * (w // col_step + 2))
-        for row in img[::row_step]:
-            line = "".join(["#" if p > 0 else " " for p in row[::col_step]])
+        print("-" * (w + 2))
+        for row in img:
+            line = "".join(["#" if p > 0 else " " for p in row])
             print(f"|{line}|")
-        print("-" * (w // col_step + 2))
+        print("-" * (w + 2))
 
     def _reader(self):
         """Background thread — owns all serial reads."""
@@ -295,4 +295,3 @@ class ArduinoSender:
                 print(GO_BYTE,end='')
             else:
                 print(f"[ARD->PI] {line}")
-            
