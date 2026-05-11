@@ -55,6 +55,7 @@ sudo apt-get install -y \
     python3-venv \
     python3-pip \
     tmux \
+    unclutter
     # Add any other apt packages your project needs, e.g.:
     # libgpiod2
     # i2c-tools
