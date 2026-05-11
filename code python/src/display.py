@@ -63,7 +63,7 @@ class Display:
                 stationary_status=status,
             )
         if cfg["fullscreen"]:
-            display_frame = cv2.rotate(display_frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
+            display_frame = cv2.rotate(display_frame, cv2.ROTATE_90_CLOCKWISE)
         cv2.imshow(self.window_name, display_frame)
 
     def update_fps(self) -> None:
