@@ -84,6 +84,7 @@ class ArduinoSender:
         self.config = config
         self._serial = None
         self._mock = False
+        self._last_sent_frame = None
         self.ready = True
         self._params_sent = False
         self._go_queue = queue.Queue()  # one entry per 'g' received
@@ -214,6 +215,7 @@ class ArduinoSender:
             )
             self._write_to_ard(END_BYTE.encode())
             self._serial.flush()
+            self._last_sent_frame = binary_image
             return True
         except serial.SerialException as e:
             print(f"[Arduino] Send error: {e}")
@@ -227,7 +229,7 @@ class ArduinoSender:
         """
         if self._mock:
             print("[MOCK] Drop current buffer")
-            return True
+            # return True
         if self._serial is None or not self._serial.is_open:
             return False
         try:
