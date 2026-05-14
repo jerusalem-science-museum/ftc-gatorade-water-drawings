@@ -30,7 +30,7 @@ arduino_send_fps: 0.33
 arduino_port: null
 
 # Force mock mode (no real Arduino, just print to console)
-arduino_mock: true
+arduino_mock: false
 
 # Layers per image (sent once at session start; API param drawing_depth)
 drawing_depth: 1
@@ -54,7 +54,7 @@ difference_threshold: 35
 difference_threshold_step: 5
 
 # What to detect: "both" (any change), "lighter" (hand brighter than bg), "darker" (shadows)
-diff_mode: lighter
+diff_mode: darker
 
 # Morphological ops to clean up binary: erode removes noise, dilate fills gaps
 morph_erode: 1
