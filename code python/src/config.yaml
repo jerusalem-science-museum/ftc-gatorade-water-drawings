@@ -23,7 +23,7 @@ cassettes_num: 10
 valve_on_time_ms: 1
 
 # Max frames per second sent to Arduino (rate limit)
-arduino_send_fps: 0.5
+arduino_send_fps: 0.33
 
 # ------------- ARDUINO -----------------
 # Serial port (null = auto-detect). Examples: "COM3", "/dev/ttyUSB0"
