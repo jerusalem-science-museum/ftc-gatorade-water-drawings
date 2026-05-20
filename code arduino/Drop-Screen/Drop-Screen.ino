@@ -87,7 +87,7 @@ void loop() {
         Serial.println(ser_msg);
         st = GET_BYTES;
         break;
-      case GET_BYTES:
+      case GET_BYTES: // reading image.
         data = Serial.read();
         if (data == END_KEY) {
           if (bytepos < num_bytes_to_read || bytepos > num_bytes_to_read) {

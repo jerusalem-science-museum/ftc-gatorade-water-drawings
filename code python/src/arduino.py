@@ -84,6 +84,7 @@ class ArduinoSender:
         self.config = config
         self._serial = None
         self._mock = False
+        self._last_sent_frame = None
         self.ready = True
         self._params_sent = False
         self._go_queue = queue.Queue()  # one entry per 'g' received
@@ -214,6 +215,7 @@ class ArduinoSender:
             )
             self._write_to_ard(END_BYTE.encode())
             self._serial.flush()
+            self._last_sent_frame = binary_image
             return True
         except serial.SerialException as e:
             print(f"[Arduino] Send error: {e}")
@@ -227,7 +229,7 @@ class ArduinoSender:
         """
         if self._mock:
             print("[MOCK] Drop current buffer")
-            return True
+            # return True
         if self._serial is None or not self._serial.is_open:
             return False
         try:
@@ -273,11 +275,11 @@ class ArduinoSender:
         row_step = max(1, h // 10)
         col_step = max(1, w // 32)
 
-        print("-" * (w // col_step + 2))
-        for row in img[::row_step]:
-            line = "".join(["#" if p > 0 else " " for p in row[::col_step]])
+        print("-" * (w + 2))
+        for row in img:
+            line = "".join(["#" if p > 0 else " " for p in row])
             print(f"|{line}|")
-        print("-" * (w // col_step + 2))
+        print("-" * (w + 2))
 
     def _reader(self):
         """Background thread — owns all serial reads."""
@@ -295,4 +297,3 @@ class ArduinoSender:
                 print(GO_BYTE,end='')
             else:
                 print(f"[ARD->PI] {line}")
-            

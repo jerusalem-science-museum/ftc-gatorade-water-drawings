@@ -1,32 +1,29 @@
-**Code for "drop screen" exhibit in the Jerusalem Science Museum**
+# Gatorade AKA "Water Drops" AKA "Dropping Drops" AKA "Droping Drops"
+An exhibit where water valves draw a picture by opening and closing their valves over time. see [this](https://www.youtube.com/watch?v=FG_l1oacWoQ) video for a demo.
 
-Directory **"camera"**: python code for handling the camera and sending the images to the connected Arduino.
-- **main.py** - main code handling everything, run this.
-- **consts.py** - constants file.
-- **process_one_image.py** - process one image manualy - not used in the final implementaion, used for testing images.
-- **images_for_idle** - sub directory containing all pictures that will be sent by the main code for the Arduino in idle mode.
+see [full documentation here](https://madaorgil.sharepoint.com/:f:/s/MakeMada/IgAcPqMIf3aWQ6yXt_N7ErjtAXLbkVMVVD-4b84fQm6kC6U?e=27vzwn)
 
-Directory **"Drop-Screen"**: Arduino code for running the images dropped in water.
-- **Drop-Screen.ino** - main code for Arduino, handling the given image and activating the valves and light.
-- **Consts.h** - constants file.
-- **Routines.h** - basic routines for controlling the valves and light.
-- **Display.h** - basic routines for Adafruit screen, currently not used.
+# Current Code State
 
-Directory **"Drop-Screen-No-Camera"**: Arduino code for dropping static constant images without any camera. Can be used for testing parameters.
-- **Drop-Screen.ino** - main code for Arduino, handling the valves and light.
-- **Consts.h** - constants file.
-- **Routines.h** - basic routines for controlling the valves, light and encoder.
-- **Display.h** - basic routines for Adafruit screen.
+- the code that's running in the exhibit is:
+    - the `currently_running_version` in the `code python` folder
+    - the `currently_running_version` folder in the `code arduino` folder
 
-Directory **"physics"**: physics analysis and simulation for "gravity correction code".
-- **time_factoring.xlsx**: physics analysis for calculating the time to open each row in the image to correct the gravity effects on the bottom rows.
--  **simulation.py**: python code for simulating the equations with one column of water.
+Then new version  in the camera is in `src` of `code python` and in `Drop-Screen` in `code arduino` with much faster camera fps and responsivity,  mainly because we removed the delays in the .ino code and by using `cv2` without `pygame`.  
+It has the following problems:
+1. some miscommunication causes some casettes to spontaneously drop some square of water, or sometimes even a huge blob of water. happens less when fps is 1, more when it is 0.33.
 
-    NOTE: in the final implementation, I deleted this gravity correction code because it didn't help that much and added unnecessary complexity.
-    I think the human eye is correcting the image naturally.
-
-Directory **"Test-Valves"**: Arduino code for testing the valves and boards. Use this if you suspect there is a problem in a valve/board.
-- **Test-Valves.ino** - main code for Arduino.
-- **Consts.h** - constants file.
-- **Routines.h** - basic routines for controlling the valves and encoder.
-- **Display.h** - basic routines for Adafruit screen.
+# Requirements:
+- Arduino nano
+- Python machine (rpi or pc)
+- camera connected to python machine via USB
+- arduino connected to python via USB
+# Installation
+1. for arduino: burn the arduino code onto an arduino nano (`code arduino/Drop-Screen`)
+2. for python: create venv with requirements.txt and run main.py.  
+    2.1. on Raspberrypi, you can run this which will set everything up for you (including autostart of the app, anydesk and making the mouse disappear):
+```bash
+cd "code python\src"
+chmod +x setup_gui_rpi.sh && ./setup_gui_rpi.sh
+./run.sh
+```
